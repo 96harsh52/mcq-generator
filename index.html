@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI MCQ Generator from Book Images</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <style>
         * {
             margin: 0;
@@ -32,6 +33,24 @@
             color: #667eea;
             margin-bottom: 30px;
             font-size: 2.5em;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .info-box h3 {
+            color: #1976D2;
+            margin-bottom: 10px;
+        }
+
+        .info-box ol {
+            margin-left: 20px;
+            color: #555;
         }
 
         .upload-section {
@@ -69,6 +88,12 @@
             transform: translateY(-2px);
         }
 
+        .file-name {
+            margin-top: 15px;
+            color: #666;
+            font-weight: 500;
+        }
+
         .preview-image {
             max-width: 100%;
             max-height: 400px;
@@ -82,6 +107,7 @@
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
+            display: none;
         }
 
         .setting-group {
@@ -133,6 +159,48 @@
         .btn:disabled {
             background: #ccc;
             cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .progress-text {
+            color: #999;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .error {
+            display: none;
+            background: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
         }
 
         .quiz-section {
@@ -237,85 +305,62 @@
             margin: 20px 0;
         }
 
-        .score-details {
-            font-size: 1.3em;
-            margin-bottom: 30px;
+        .btn-restart {
+            background: white;
+            color: #667eea;
+            margin-top: 20px;
         }
 
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
+        .btn-restart:hover {
+            background: #f0f0f0;
         }
 
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #667eea;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+            h1 {
+                font-size: 1.8em;
+            }
 
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            display: none;
-        }
-
-        .info-box {
-            background: #d1ecf1;
-            color: #0c5460;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .info-box strong {
-            display: block;
-            margin-bottom: 10px;
-            font-size: 1.1em;
+            .settings {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📚 AI MCQ Generator</h1>
-
+        
         <div class="info-box">
-            <strong>ℹ️ How to use:</strong>
-            1. Upload an image of your book text<br>
-            2. Choose difficulty level and number of questions<br>
-            3. Click "Generate MCQs"<br>
-            4. Answer the questions and see your score!
+            <h3>ℹ️ How to use:</h3>
+            <ol>
+                <li>Upload an image of your book text</li>
+                <li>Choose difficulty level and number of questions</li>
+                <li>Click "Generate MCQs"</li>
+                <li>Answer the questions and see your score!</li>
+            </ol>
         </div>
 
         <div class="upload-section">
             <div class="file-input-wrapper">
-                <input type="file" id="imageInput" accept="image/*">
                 <label for="imageInput" class="file-input-label">
                     📤 Upload Book Image
                 </label>
+                <input type="file" id="imageInput" accept="image/*">
             </div>
+            <div class="file-name" id="fileName"></div>
             <img id="previewImage" class="preview-image" alt="Preview">
-            <p id="fileName" style="margin-top: 15px; color: #666;"></p>
         </div>
 
-        <div class="settings" id="settings" style="display: none;">
+        <div class="settings" id="settings">
             <div class="setting-group">
                 <label for="difficulty">Difficulty Level:</label>
                 <select id="difficulty">
                     <option value="easy">Easy</option>
-                    <option value="medium" selected>Medium</option>
+                    <option value="medium">Medium</option>
                     <option value="hard">Hard</option>
                     <option value="mixed">Mixed</option>
                 </select>
@@ -327,25 +372,27 @@
             </div>
         </div>
 
-        <button id="generateBtn" class="btn" disabled>Generate MCQs</button>
+        <button class="btn" id="generateBtn" disabled>Generate MCQs</button>
 
         <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Analyzing your image and generating questions...</p>
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Processing your image...</div>
+            <div class="progress-text" id="progressText">Extracting text from image...</div>
         </div>
 
         <div class="error" id="error"></div>
 
         <div class="quiz-section" id="quizSection">
+            <h2 style="color: #667eea; margin-bottom: 20px;">Answer the Questions</h2>
             <div id="questionsContainer"></div>
-            <button id="submitBtn" class="btn">Submit Answers</button>
+            <button class="btn" id="submitBtn">Submit Answers</button>
         </div>
 
         <div class="results" id="results">
-            <h2>🎉 Quiz Complete!</h2>
-            <div class="score" id="scoreDisplay"></div>
-            <div class="score-details" id="scoreDetails"></div>
-            <button class="btn" onclick="location.reload()" style="background: white; color: #667eea;">Start New Quiz</button>
+            <h2>Quiz Results</h2>
+            <div class="score" id="scoreDisplay">0%</div>
+            <p id="scoreDetails"></p>
+            <button class="btn btn-restart" onclick="location.reload()">Start New Quiz</button>
         </div>
     </div>
 
@@ -360,6 +407,7 @@
         const settings = document.getElementById('settings');
         const generateBtn = document.getElementById('generateBtn');
         const loading = document.getElementById('loading');
+        const progressText = document.getElementById('progressText');
         const error = document.getElementById('error');
         const quizSection = document.getElementById('quizSection');
         const questionsContainer = document.getElementById('questionsContainer');
@@ -394,6 +442,8 @@
                 // Extract text from image using OCR
                 await extractTextFromImage(file);
                 
+                progressText.textContent = 'Generating questions...';
+                
                 // Generate MCQs
                 await generateMCQs();
                 
@@ -401,6 +451,7 @@
                 loading.style.display = 'none';
                 quizSection.style.display = 'block';
             } catch (err) {
+                console.error('Error:', err);
                 loading.style.display = 'none';
                 error.style.display = 'block';
                 error.textContent = 'Error: ' + err.message;
@@ -409,29 +460,32 @@
         });
 
         async function extractTextFromImage(file) {
-            // Using Tesseract.js for OCR
-            return new Promise((resolve, reject) => {
-                // Load Tesseract dynamically
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
-                script.onload = async () => {
-                    try {
-                        const worker = await Tesseract.createWorker('eng');
-                        const { data: { text } } = await worker.recognize(file);
-                        await worker.terminate();
-                        
-                        extractedText = text.trim();
-                        if (!extractedText) {
-                            reject(new Error('No text found in image. Please upload a clearer image.'));
+            try {
+                progressText.textContent = 'Extracting text from image...';
+                
+                const worker = await Tesseract.createWorker('eng', 1, {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const percent = Math.round(m.progress * 100);
+                            progressText.textContent = `Extracting text from image... ${percent}%`;
                         }
-                        resolve();
-                    } catch (err) {
-                        reject(err);
                     }
-                };
-                script.onerror = () => reject(new Error('Failed to load OCR library'));
-                document.head.appendChild(script);
-            });
+                });
+                
+                const { data: { text } } = await worker.recognize(file);
+                await worker.terminate();
+                
+                extractedText = text.trim();
+                
+                if (!extractedText || extractedText.length < 50) {
+                    throw new Error('No readable text found in image. Please upload a clearer image with more text.');
+                }
+                
+                console.log('Extracted text length:', extractedText.length);
+            } catch (err) {
+                console.error('OCR Error:', err);
+                throw new Error('Failed to extract text from image: ' + err.message);
+            }
         }
 
         async function generateMCQs() {
@@ -440,7 +494,7 @@
 
             // Simple MCQ generation based on extracted text
             questions = [];
-            const sentences = extractedText.split(/[.!?]+/).filter(s => s.trim().length > 20);
+            const sentences = extractedText.split(/[.!?]+/).filter(s => s.trim().length > 30);
             
             if (sentences.length < numQuestions) {
                 throw new Error(`Can only generate ${sentences.length} questions from this text. Please reduce the number of questions or upload an image with more text.`);
@@ -451,7 +505,7 @@
 
             for (let i = 0; i < numQuestions; i++) {
                 const sentence = shuffled[i].trim();
-                const words = sentence.split(' ').filter(w => w.length > 3);
+                const words = sentence.split(/\s+/).filter(w => w.length > 3 && /^[a-zA-Z]+$/.test(w));
                 
                 if (words.length < 5) continue;
 
@@ -474,9 +528,12 @@
         }
 
         function generateQuestionFromSentence(sentence, words, difficulty) {
-            // Pick a random word as the answer
-            const answerWord = words[Math.floor(Math.random() * words.length)];
-            const questionText = sentence.replace(new RegExp(`\\b${answerWord}\\b`, 'i'), '______');
+            // Pick a random word as the answer (prefer words in the middle of sentence)
+            const middleWords = words.slice(Math.floor(words.length * 0.2), Math.floor(words.length * 0.8));
+            const answerWord = middleWords[Math.floor(Math.random() * middleWords.length)] || words[Math.floor(words.length / 2)];
+            
+            const regex = new RegExp(`\\b${answerWord}\\b`, 'i');
+            const questionText = sentence.replace(regex, '______');
 
             // Generate wrong options
             const wrongOptions = generateWrongOptions(answerWord, words, difficulty);
@@ -494,21 +551,31 @@
 
         function generateWrongOptions(correctWord, availableWords, difficulty) {
             const wrong = [];
-            const filtered = availableWords.filter(w => w !== correctWord && w.length > 2);
+            const filtered = availableWords.filter(w => 
+                w.toLowerCase() !== correctWord.toLowerCase() && 
+                w.length > 2
+            );
             
             // Number of options based on difficulty
             const numOptions = difficulty === 'easy' ? 2 : 3;
             
-            while (wrong.length < numOptions && filtered.length > 0) {
-                const randomIndex = Math.floor(Math.random() * filtered.length);
-                wrong.push(filtered[randomIndex]);
-                filtered.splice(randomIndex, 1);
+            // Try to get words with similar length
+            const similarLength = filtered.filter(w => 
+                Math.abs(w.length - correctWord.length) <= 2
+            );
+            
+            const candidates = similarLength.length >= numOptions ? similarLength : filtered;
+            
+            while (wrong.length < numOptions && candidates.length > 0) {
+                const randomIndex = Math.floor(Math.random() * candidates.length);
+                wrong.push(candidates[randomIndex]);
+                candidates.splice(randomIndex, 1);
             }
 
             // If not enough words, add some generic wrong options
-            const genericOptions = ['option', 'answer', 'text', 'word', 'item'];
+            const genericOptions = ['unknown', 'missing', 'hidden', 'removed', 'deleted'];
             while (wrong.length < numOptions) {
-                wrong.push(genericOptions[wrong.length] || 'unknown');
+                wrong.push(genericOptions[wrong.length % genericOptions.length]);
             }
 
             return wrong;
