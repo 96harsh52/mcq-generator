@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI MCQ Generator from Book Images</title>
+    <title>AI MCQ Generator - Open Source Transformers</title>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/inference@2.6.4/dist/index.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -13,52 +17,196 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'DM Sans', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
             min-height: 100vh;
             padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
         }
 
         .container {
-            max-width: 900px;
+            max-width: 1000px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 50px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 1;
+            backdrop-filter: blur(10px);
         }
 
         h1 {
+            font-family: 'Playfair Display', serif;
             text-align: center;
-            color: #667eea;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 15px;
+            font-size: 3.5em;
+            font-weight: 900;
+            letter-spacing: -2px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.1em;
+            margin-bottom: 40px;
+            font-weight: 500;
+        }
+
+        .ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 0.85em;
+            font-weight: 700;
             margin-bottom: 30px;
-            font-size: 2.5em;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
 
         .info-box {
-            background: #e7f3ff;
-            border-left: 4px solid #2196F3;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #eff6ff 0%, #f3e8ff 100%);
+            border-left: 4px solid #3b82f6;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
         .info-box h3 {
-            color: #1976D2;
-            margin-bottom: 10px;
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-family: 'Playfair Display', serif;
+            font-size: 1.4em;
         }
 
-        .info-box ol {
-            margin-left: 20px;
-            color: #555;
+        .info-box ul {
+            margin-left: 25px;
+            color: #475569;
+            line-height: 1.8;
+        }
+
+        .info-box ul li {
+            margin-bottom: 8px;
+        }
+
+        .api-key-section {
+            background: #fff7ed;
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 16px;
+        }
+
+        .api-key-section h3 {
+            color: #92400e;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .api-key-input-wrapper {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .api-key-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #fcd34d;
+            border-radius: 10px;
+            font-size: 1em;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .api-key-input:focus {
+            outline: none;
+            border-color: #f59e0b;
+        }
+
+        .save-key-btn {
+            background: #f59e0b;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .save-key-btn:hover {
+            background: #d97706;
+        }
+
+        .api-instructions {
+            margin-top: 15px;
+            font-size: 0.9em;
+            color: #92400e;
+        }
+
+        .api-instructions a {
+            color: #d97706;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .api-instructions a:hover {
+            text-decoration: underline;
         }
 
         .upload-section {
-            background: #f8f9fa;
-            padding: 30px;
-            border-radius: 15px;
+            background: #f8fafc;
+            padding: 40px;
+            border-radius: 20px;
             margin-bottom: 30px;
             text-align: center;
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s;
+        }
+
+        .upload-section:hover {
+            border-color: #3b82f6;
+            background: #f1f5f9;
         }
 
         .file-input-wrapper {
@@ -73,108 +221,177 @@
         }
 
         .file-input-label {
-            background: #667eea;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
-            padding: 15px 30px;
-            border-radius: 10px;
+            padding: 18px 40px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 1.1em;
+            font-weight: 700;
             transition: all 0.3s;
             display: inline-block;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
         }
 
         .file-input-label:hover {
-            background: #5568d3;
             transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
         }
 
-        .file-name {
-            margin-top: 15px;
-            color: #666;
-            font-weight: 500;
+        .images-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 25px;
         }
 
-        .preview-image {
-            max-width: 100%;
-            max-height: 400px;
-            margin: 20px 0;
-            border-radius: 10px;
-            display: none;
+        .image-preview-item {
+            position: relative;
+            border: 3px solid #e2e8f0;
+            border-radius: 16px;
+            overflow: hidden;
+            aspect-ratio: 1;
+            transition: all 0.3s;
+        }
+
+        .image-preview-item:hover {
+            border-color: #3b82f6;
+            transform: scale(1.05);
+        }
+
+        .image-preview-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-preview-item .remove-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        .image-preview-item .remove-btn:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+
+        .image-preview-item .image-number {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            background: rgba(59, 130, 246, 0.95);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            font-weight: 700;
+        }
+
+        .images-info {
+            margin-top: 20px;
+            color: #3b82f6;
+            font-weight: 700;
+            font-size: 1.2em;
         }
 
         .settings {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
             margin-bottom: 30px;
             display: none;
         }
 
         .setting-group {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 16px;
+            border: 2px solid #e2e8f0;
         }
 
         .setting-group label {
             display: block;
-            margin-bottom: 10px;
-            font-weight: 600;
-            color: #333;
+            margin-bottom: 12px;
+            font-weight: 700;
+            color: #1e293b;
+            font-size: 1.05em;
         }
 
         select, input[type="number"] {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
             font-size: 1em;
-            transition: border-color 0.3s;
+            font-family: 'DM Sans', sans-serif;
+            transition: all 0.3s;
+            background: white;
         }
 
         select:focus, input[type="number"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .btn {
-            background: #667eea;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
-            padding: 15px 40px;
+            padding: 18px 40px;
             border: none;
-            border-radius: 10px;
-            font-size: 1.1em;
+            border-radius: 12px;
+            font-size: 1.2em;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s;
             display: block;
             width: 100%;
             margin: 20px 0;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
         }
 
         .btn:hover:not(:disabled) {
-            background: #5568d3;
             transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
         }
 
         .btn:disabled {
-            background: #ccc;
+            background: #cbd5e1;
             cursor: not-allowed;
+            box-shadow: none;
         }
 
         .loading {
             display: none;
             text-align: center;
-            padding: 40px;
+            padding: 50px;
+            background: #f8fafc;
+            border-radius: 20px;
+            margin: 20px 0;
         }
 
         .loading-spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #667eea;
+            border: 6px solid #e2e8f0;
+            border-top: 6px solid #3b82f6;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            margin: 0 auto 25px;
         }
 
         @keyframes spin {
@@ -183,24 +400,60 @@
         }
 
         .loading-text {
-            color: #667eea;
-            font-size: 1.2em;
+            color: #1e293b;
+            font-size: 1.3em;
+            font-weight: 700;
+            margin-bottom: 10px;
         }
 
         .progress-text {
-            color: #999;
-            margin-top: 10px;
-            font-size: 0.9em;
+            color: #64748b;
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 40px;
+            background: #e2e8f0;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 25px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1em;
         }
 
         .error {
             display: none;
-            background: #f8d7da;
-            color: #721c24;
-            padding: 20px;
-            border-radius: 10px;
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 25px;
+            border-radius: 16px;
             margin: 20px 0;
-            border-left: 4px solid #dc3545;
+            border-left: 4px solid #ef4444;
+            font-weight: 500;
+        }
+
+        .success {
+            display: none;
+            background: #dcfce7;
+            color: #166534;
+            padding: 20px;
+            border-radius: 16px;
+            margin: 20px 0;
+            border-left: 4px solid #22c55e;
+            font-weight: 500;
         }
 
         .quiz-section {
@@ -208,230 +461,343 @@
         }
 
         .question-card {
-            background: #f8f9fa;
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            border-left: 5px solid #667eea;
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+        }
+
+        .question-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border-color: #cbd5e1;
         }
 
         .question-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .question-number {
             font-weight: 700;
-            color: #667eea;
-            font-size: 1.1em;
+            color: #3b82f6;
+            font-size: 1.2em;
         }
 
         .difficulty-badge {
-            padding: 5px 15px;
-            border-radius: 20px;
+            padding: 6px 18px;
+            border-radius: 50px;
             font-size: 0.9em;
-            font-weight: 600;
+            font-weight: 700;
         }
 
-        .difficulty-easy { background: #d4edda; color: #155724; }
-        .difficulty-medium { background: #fff3cd; color: #856404; }
-        .difficulty-hard { background: #f8d7da; color: #721c24; }
+        .difficulty-easy { background: #dcfce7; color: #166534; }
+        .difficulty-medium { background: #fef3c7; color: #92400e; }
+        .difficulty-hard { background: #fee2e2; color: #991b1b; }
 
         .question-text {
-            font-size: 1.2em;
-            margin-bottom: 20px;
-            color: #333;
-            line-height: 1.6;
+            font-size: 1.3em;
+            margin-bottom: 25px;
+            color: #1e293b;
+            line-height: 1.7;
+            font-weight: 500;
         }
 
         .options {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 15px;
         }
 
         .option {
-            padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
+            padding: 18px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
             cursor: pointer;
             transition: all 0.3s;
             background: white;
+            font-size: 1.05em;
         }
 
         .option:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: #3b82f6;
+            background: #eff6ff;
+            transform: translateX(5px);
         }
 
         .option.selected {
-            border-color: #667eea;
-            background: #667eea;
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
+            transform: translateX(5px);
         }
 
         .option.correct {
-            border-color: #28a745;
-            background: #d4edda;
-            color: #155724;
+            border-color: #22c55e;
+            background: #dcfce7;
+            color: #166534;
         }
 
         .option.incorrect {
-            border-color: #dc3545;
-            background: #f8d7da;
-            color: #721c24;
+            border-color: #ef4444;
+            background: #fee2e2;
+            color: #991b1b;
         }
 
         .results {
             display: none;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
             color: white;
-            padding: 40px;
-            border-radius: 15px;
+            padding: 50px;
+            border-radius: 24px;
             text-align: center;
-            margin-top: 30px;
+            margin-top: 40px;
+            box-shadow: 0 25px 50px -12px rgba(59, 130, 246, 0.5);
         }
 
         .results h2 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
+            font-family: 'Playfair Display', serif;
+            font-size: 3em;
+            margin-bottom: 25px;
+            font-weight: 900;
         }
 
         .score {
-            font-size: 4em;
-            font-weight: 700;
-            margin: 20px 0;
+            font-size: 5em;
+            font-weight: 900;
+            margin: 25px 0;
+            font-family: 'Playfair Display', serif;
         }
 
         .btn-restart {
             background: white;
-            color: #667eea;
-            margin-top: 20px;
+            color: #3b82f6;
+            margin-top: 25px;
         }
 
         .btn-restart:hover {
-            background: #f0f0f0;
+            background: #f8fafc;
         }
 
         @media (max-width: 768px) {
             .container {
-                padding: 20px;
+                padding: 30px 20px;
             }
 
             h1 {
-                font-size: 1.8em;
+                font-size: 2.2em;
             }
 
             .settings {
                 grid-template-columns: 1fr;
+            }
+
+            .images-preview {
+                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📚 AI MCQ Generator</h1>
+        <div style="text-align: center;">
+            <span class="ai-badge">
+                <span>🤖</span>
+                <span>Open Source AI - Powered by Hugging Face</span>
+            </span>
+        </div>
+        
+        <h1>MCQ Generator</h1>
+        <p class="subtitle">Using open-source transformer models for intelligent question generation</p>
+        
+        <div class="api-key-section">
+            <h3>🔑 Hugging Face API Key</h3>
+            <p style="color: #92400e; margin-bottom: 10px;">
+                To use AI-powered question generation, you need a free Hugging Face API key.
+            </p>
+            <div class="api-key-input-wrapper">
+                <input 
+                    type="password" 
+                    id="apiKey" 
+                    class="api-key-input" 
+                    placeholder="Enter your Hugging Face API key (hf_...)"
+                >
+                <button class="save-key-btn" onclick="saveApiKey()">Save Key</button>
+            </div>
+            <div class="api-instructions">
+                <strong>How to get a free API key:</strong><br>
+                1. Go to <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face Tokens</a><br>
+                2. Click "New token"<br>
+                3. Name it "MCQ Generator" and select "Read" access<br>
+                4. Copy and paste the token above<br>
+                <em>Your key is stored locally in your browser only.</em>
+            </div>
+        </div>
+
+        <div class="success" id="successMsg"></div>
         
         <div class="info-box">
-            <h3>ℹ️ How to use:</h3>
-            <ol>
-                <li>Upload an image of your book text</li>
-                <li>Choose difficulty level and number of questions</li>
-                <li>Click "Generate MCQs"</li>
-                <li>Answer the questions and see your score!</li>
-            </ol>
+            <h3>✨ How It Works</h3>
+            <ul>
+                <li><strong>OCR Technology:</strong> Extracts text from images using Tesseract.js</li>
+                <li><strong>Open Source AI:</strong> Uses Mistral-7B (Hugging Face) for question generation</li>
+                <li><strong>Free & Private:</strong> Runs on free tier APIs, your data stays private</li>
+                <li><strong>GitHub Compatible:</strong> Works perfectly on GitHub Pages</li>
+            </ul>
         </div>
 
         <div class="upload-section">
             <div class="file-input-wrapper">
                 <label for="imageInput" class="file-input-label">
-                    📤 Upload Book Image
+                    📤 Upload Book Images
                 </label>
-                <input type="file" id="imageInput" accept="image/*">
+                <input type="file" id="imageInput" accept="image/*" multiple>
             </div>
-            <div class="file-name" id="fileName"></div>
-            <img id="previewImage" class="preview-image" alt="Preview">
+            <div class="images-info" id="imagesInfo">No images selected</div>
+            <div class="images-preview" id="imagesPreview"></div>
         </div>
 
         <div class="settings" id="settings">
             <div class="setting-group">
                 <label for="difficulty">Difficulty Level:</label>
                 <select id="difficulty">
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                    <option value="mixed">Mixed</option>
+                    <option value="easy">Easy - Basic comprehension</option>
+                    <option value="medium" selected>Medium - Analytical thinking</option>
+                    <option value="hard">Hard - Critical analysis</option>
+                    <option value="mixed">Mixed - Varied difficulty</option>
                 </select>
             </div>
 
             <div class="setting-group">
                 <label for="numQuestions">Number of Questions:</label>
-                <input type="number" id="numQuestions" min="1" max="20" value="5">
+                <input type="number" id="numQuestions" min="1" max="10" value="5">
             </div>
         </div>
 
-        <button class="btn" id="generateBtn" disabled>Generate MCQs</button>
+        <button class="btn" id="generateBtn" disabled>Generate AI-Powered MCQs</button>
 
         <div class="loading" id="loading">
             <div class="loading-spinner"></div>
-            <div class="loading-text">Processing your image...</div>
-            <div class="progress-text" id="progressText">Extracting text from image...</div>
+            <div class="loading-text">AI is working...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar">0%</div>
+            </div>
+            <div class="progress-text" id="progressText">Initializing...</div>
         </div>
 
         <div class="error" id="error"></div>
 
         <div class="quiz-section" id="quizSection">
-            <h2 style="color: #667eea; margin-bottom: 20px;">Answer the Questions</h2>
+            <h2 style="color: #1e293b; margin-bottom: 30px; font-family: 'Playfair Display', serif; font-size: 2em;">Answer the Questions</h2>
             <div id="questionsContainer"></div>
             <button class="btn" id="submitBtn">Submit Answers</button>
         </div>
 
         <div class="results" id="results">
-            <h2>Quiz Results</h2>
+            <h2>Quiz Complete!</h2>
             <div class="score" id="scoreDisplay">0%</div>
-            <p id="scoreDetails"></p>
+            <p id="scoreDetails" style="font-size: 1.3em; margin-top: 10px;"></p>
             <button class="btn btn-restart" onclick="location.reload()">Start New Quiz</button>
         </div>
     </div>
 
     <script>
+        let selectedFiles = [];
         let extractedText = '';
         let questions = [];
         let userAnswers = [];
+        let hfApiKey = localStorage.getItem('hf_api_key') || '';
 
         const imageInput = document.getElementById('imageInput');
-        const previewImage = document.getElementById('previewImage');
-        const fileName = document.getElementById('fileName');
+        const imagesPreview = document.getElementById('imagesPreview');
+        const imagesInfo = document.getElementById('imagesInfo');
         const settings = document.getElementById('settings');
         const generateBtn = document.getElementById('generateBtn');
         const loading = document.getElementById('loading');
         const progressText = document.getElementById('progressText');
+        const progressBar = document.getElementById('progressBar');
         const error = document.getElementById('error');
+        const successMsg = document.getElementById('successMsg');
         const quizSection = document.getElementById('quizSection');
         const questionsContainer = document.getElementById('questionsContainer');
         const submitBtn = document.getElementById('submitBtn');
         const results = document.getElementById('results');
 
-        imageInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    previewImage.src = event.target.result;
-                    previewImage.style.display = 'block';
-                    fileName.textContent = `Selected: ${file.name}`;
-                    settings.style.display = 'grid';
-                    generateBtn.disabled = false;
-                };
-                reader.readAsDataURL(file);
+        // Load saved API key
+        if (hfApiKey) {
+            document.getElementById('apiKey').value = hfApiKey;
+        }
+
+        function saveApiKey() {
+            const key = document.getElementById('apiKey').value.trim();
+            if (key) {
+                localStorage.setItem('hf_api_key', key);
+                hfApiKey = key;
+                successMsg.textContent = '✅ API Key saved successfully!';
+                successMsg.style.display = 'block';
+                setTimeout(() => {
+                    successMsg.style.display = 'none';
+                }, 3000);
+            } else {
+                alert('Please enter a valid API key');
             }
+        }
+
+        imageInput.addEventListener('change', (e) => {
+            const newFiles = Array.from(e.target.files);
+            selectedFiles = [...selectedFiles, ...newFiles];
+            displayImagePreviews();
+            updateUI();
         });
 
+        function displayImagePreviews() {
+            imagesPreview.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.className = 'image-preview-item';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" alt="Preview ${index + 1}">
+                        <button class="remove-btn" onclick="removeImage(${index})">×</button>
+                        <div class="image-number">#${index + 1}</div>
+                    `;
+                    imagesPreview.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function removeImage(index) {
+            selectedFiles.splice(index, 1);
+            displayImagePreviews();
+            updateUI();
+        }
+
+        function updateUI() {
+            if (selectedFiles.length > 0) {
+                imagesInfo.textContent = `${selectedFiles.length} image${selectedFiles.length > 1 ? 's' : ''} selected`;
+                settings.style.display = 'grid';
+                generateBtn.disabled = false;
+            } else {
+                imagesInfo.textContent = 'No images selected';
+                settings.style.display = 'none';
+                generateBtn.disabled = true;
+            }
+        }
+
         generateBtn.addEventListener('click', async () => {
-            const file = imageInput.files[0];
-            if (!file) return;
+            if (selectedFiles.length === 0) return;
+
+            if (!hfApiKey) {
+                error.style.display = 'block';
+                error.textContent = '❌ Please enter your Hugging Face API key first!';
+                return;
+            }
 
             loading.style.display = 'block';
             error.style.display = 'none';
@@ -439,146 +805,230 @@
             generateBtn.disabled = true;
 
             try {
-                // Extract text from image using OCR
-                await extractTextFromImage(file);
+                // Step 1: Extract text from all images using OCR
+                progressText.textContent = 'Step 1/2: Extracting text from images...';
+                await extractTextFromAllImages();
                 
-                progressText.textContent = 'Generating questions...';
+                // Step 2: Generate questions using AI
+                progressText.textContent = 'Step 2/2: AI generating questions...';
+                progressBar.style.width = '85%';
+                progressBar.textContent = '85%';
                 
-                // Generate MCQs
-                await generateMCQs();
+                await generateAIQuestions();
                 
                 displayQuestions();
                 loading.style.display = 'none';
                 quizSection.style.display = 'block';
+                progressBar.style.width = '100%';
+                progressBar.textContent = '100%';
             } catch (err) {
                 console.error('Error:', err);
                 loading.style.display = 'none';
                 error.style.display = 'block';
-                error.textContent = 'Error: ' + err.message;
+                error.textContent = '❌ Error: ' + err.message;
                 generateBtn.disabled = false;
             }
         });
 
-        async function extractTextFromImage(file) {
-            try {
-                progressText.textContent = 'Extracting text from image...';
+        async function extractTextFromAllImages() {
+            extractedText = '';
+            const totalImages = selectedFiles.length;
+
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                progressText.textContent = `Extracting text from image ${i + 1} of ${totalImages}...`;
                 
-                const worker = await Tesseract.createWorker('eng', 1, {
+                const text = await extractTextFromImage(file, i, totalImages);
+                extractedText += text + '\n\n';
+                
+                const progress = Math.round(((i + 1) / totalImages) * 70);
+                progressBar.style.width = `${progress}%`;
+                progressBar.textContent = `${progress}%`;
+            }
+
+            if (!extractedText.trim() || extractedText.length < 100) {
+                throw new Error('Not enough text found in images. Please upload clearer images with more text content.');
+            }
+
+            console.log('Total extracted text length:', extractedText.length);
+        }
+
+        async function extractTextFromImage(file, imageIndex, totalImages) {
+            try {
+                const worker = await Tesseract.createWorker({
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             const percent = Math.round(m.progress * 100);
-                            progressText.textContent = `Extracting text from image... ${percent}%`;
+                            progressText.textContent = `Extracting from image ${imageIndex + 1}/${totalImages}... ${percent}%`;
                         }
-                    }
+                    },
+                    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+                    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+                    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
                 });
+                
+                await worker.loadLanguage('eng');
+                await worker.initialize('eng');
                 
                 const { data: { text } } = await worker.recognize(file);
                 await worker.terminate();
                 
-                extractedText = text.trim();
-                
-                if (!extractedText || extractedText.length < 50) {
-                    throw new Error('No readable text found in image. Please upload a clearer image with more text.');
-                }
-                
-                console.log('Extracted text length:', extractedText.length);
+                return text.trim();
             } catch (err) {
-                console.error('OCR Error:', err);
-                throw new Error('Failed to extract text from image: ' + err.message);
+                console.error(`OCR Error for image ${imageIndex + 1}:`, err);
+                throw new Error(`Failed to extract text from image ${imageIndex + 1}: ${err.message}`);
             }
         }
 
-        async function generateMCQs() {
+        async function generateAIQuestions() {
             const difficulty = document.getElementById('difficulty').value;
             const numQuestions = parseInt(document.getElementById('numQuestions').value);
 
-            // Simple MCQ generation based on extracted text
+            progressText.textContent = 'Sending to AI model (Mistral-7B)...';
+            
+            // Prepare the prompt
+            const prompt = `Generate ${numQuestions} multiple-choice questions from this text. Difficulty: ${difficulty}.
+
+Text: ${extractedText.substring(0, 2000)}
+
+Format each question as:
+Q: [question]
+A) [option]
+B) [option]
+C) [option]
+D) [option]
+Correct: [A/B/C/D]
+
+Generate exactly ${numQuestions} questions.`;
+
+            try {
+                // Using Hugging Face Inference API with Mistral model
+                const response = await fetch(
+                    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${hfApiKey}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            inputs: prompt,
+                            parameters: {
+                                max_new_tokens: 2000,
+                                temperature: 0.7,
+                                top_p: 0.95,
+                            }
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('Invalid API key. Please check your Hugging Face token.');
+                    }
+                    throw new Error(`API request failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('AI Response:', data);
+                
+                // Parse the response
+                let responseText = '';
+                if (Array.isArray(data) && data[0]?.generated_text) {
+                    responseText = data[0].generated_text;
+                } else if (data.generated_text) {
+                    responseText = data.generated_text;
+                } else {
+                    throw new Error('Unexpected API response format');
+                }
+
+                // Parse questions from the AI response
+                parseAIResponse(responseText, numQuestions, difficulty);
+
+                if (questions.length === 0) {
+                    throw new Error('AI did not generate valid questions. Using fallback method.');
+                }
+
+            } catch (err) {
+                console.error('AI Generation Error:', err);
+                console.log('Falling back to basic question generation...');
+                generateFallbackQuestions(numQuestions, difficulty);
+            }
+        }
+
+        function parseAIResponse(text, numQuestions, difficulty) {
+            questions = [];
+            
+            // Try to parse structured format
+            const questionBlocks = text.split(/Q\d*:|Question \d+:/i).filter(b => b.trim());
+            
+            for (let i = 0; i < Math.min(questionBlocks.length, numQuestions); i++) {
+                const block = questionBlocks[i];
+                
+                // Extract question
+                const questionMatch = block.match(/^([^\n]+)/);
+                if (!questionMatch) continue;
+                const question = questionMatch[1].trim();
+                
+                // Extract options
+                const optionMatches = block.match(/[A-D]\)([^\n]+)/gi);
+                if (!optionMatches || optionMatches.length < 4) continue;
+                
+                const options = optionMatches.map(opt => 
+                    opt.replace(/^[A-D]\)\s*/i, '').trim()
+                );
+                
+                // Extract correct answer
+                const correctMatch = block.match(/Correct:\s*([A-D])/i);
+                const correct = correctMatch ? 
+                    correctMatch[1].toUpperCase().charCodeAt(0) - 65 : 0;
+                
+                questions.push({
+                    question: question,
+                    options: options.slice(0, 4),
+                    correct: Math.min(correct, 3),
+                    difficulty: difficulty === 'mixed' ? 
+                        ['easy', 'medium', 'hard'][i % 3] : difficulty
+                });
+            }
+        }
+
+        function generateFallbackQuestions(numQuestions, difficulty) {
             questions = [];
             const sentences = extractedText.split(/[.!?]+/).filter(s => s.trim().length > 30);
             
-            if (sentences.length < numQuestions) {
-                throw new Error(`Can only generate ${sentences.length} questions from this text. Please reduce the number of questions or upload an image with more text.`);
-            }
-
-            // Shuffle sentences
             const shuffled = sentences.sort(() => Math.random() - 0.5);
 
-            for (let i = 0; i < numQuestions; i++) {
+            for (let i = 0; i < Math.min(numQuestions, shuffled.length); i++) {
                 const sentence = shuffled[i].trim();
                 const words = sentence.split(/\s+/).filter(w => w.length > 3 && /^[a-zA-Z]+$/.test(w));
                 
                 if (words.length < 5) continue;
 
-                // Generate question based on difficulty
-                let questionDifficulty = difficulty;
-                if (difficulty === 'mixed') {
-                    const diffOptions = ['easy', 'medium', 'hard'];
-                    questionDifficulty = diffOptions[Math.floor(Math.random() * diffOptions.length)];
+                const middleWords = words.slice(Math.floor(words.length * 0.2), Math.floor(words.length * 0.8));
+                const answerWord = middleWords[Math.floor(Math.random() * middleWords.length)];
+                
+                const regex = new RegExp(`\\b${answerWord}\\b`, 'i');
+                const questionText = sentence.replace(regex, '______');
+
+                const wrongOptions = [];
+                const filtered = words.filter(w => w.toLowerCase() !== answerWord.toLowerCase());
+                
+                for (let j = 0; j < 3 && filtered.length > 0; j++) {
+                    const idx = Math.floor(Math.random() * filtered.length);
+                    wrongOptions.push(filtered[idx]);
+                    filtered.splice(idx, 1);
                 }
 
-                const question = generateQuestionFromSentence(sentence, words, questionDifficulty);
-                if (question) {
-                    questions.push(question);
-                }
+                const options = [answerWord, ...wrongOptions].sort(() => Math.random() - 0.5);
+
+                questions.push({
+                    question: `Fill in the blank: ${questionText}`,
+                    options: options,
+                    correct: options.indexOf(answerWord),
+                    difficulty: difficulty === 'mixed' ? ['easy', 'medium', 'hard'][i % 3] : difficulty
+                });
             }
-
-            if (questions.length === 0) {
-                throw new Error('Could not generate questions. Please upload an image with more readable text.');
-            }
-        }
-
-        function generateQuestionFromSentence(sentence, words, difficulty) {
-            // Pick a random word as the answer (prefer words in the middle of sentence)
-            const middleWords = words.slice(Math.floor(words.length * 0.2), Math.floor(words.length * 0.8));
-            const answerWord = middleWords[Math.floor(Math.random() * middleWords.length)] || words[Math.floor(words.length / 2)];
-            
-            const regex = new RegExp(`\\b${answerWord}\\b`, 'i');
-            const questionText = sentence.replace(regex, '______');
-
-            // Generate wrong options
-            const wrongOptions = generateWrongOptions(answerWord, words, difficulty);
-            
-            // Combine and shuffle options
-            const options = [answerWord, ...wrongOptions].sort(() => Math.random() - 0.5);
-
-            return {
-                question: `Fill in the blank: ${questionText}`,
-                options: options,
-                correct: options.indexOf(answerWord),
-                difficulty: difficulty
-            };
-        }
-
-        function generateWrongOptions(correctWord, availableWords, difficulty) {
-            const wrong = [];
-            const filtered = availableWords.filter(w => 
-                w.toLowerCase() !== correctWord.toLowerCase() && 
-                w.length > 2
-            );
-            
-            // Number of options based on difficulty
-            const numOptions = difficulty === 'easy' ? 2 : 3;
-            
-            // Try to get words with similar length
-            const similarLength = filtered.filter(w => 
-                Math.abs(w.length - correctWord.length) <= 2
-            );
-            
-            const candidates = similarLength.length >= numOptions ? similarLength : filtered;
-            
-            while (wrong.length < numOptions && candidates.length > 0) {
-                const randomIndex = Math.floor(Math.random() * candidates.length);
-                wrong.push(candidates[randomIndex]);
-                candidates.splice(randomIndex, 1);
-            }
-
-            // If not enough words, add some generic wrong options
-            const genericOptions = ['unknown', 'missing', 'hidden', 'removed', 'deleted'];
-            while (wrong.length < numOptions) {
-                wrong.push(genericOptions[wrong.length % genericOptions.length]);
-            }
-
-            return wrong;
         }
 
         function displayQuestions() {
@@ -611,7 +1061,6 @@
                     const qIndex = parseInt(this.dataset.question);
                     const optIndex = parseInt(this.dataset.option);
                     
-                    // Deselect other options in same question
                     document.querySelectorAll(`.option[data-question="${qIndex}"]`).forEach(o => {
                         o.classList.remove('selected');
                     });
@@ -623,13 +1072,11 @@
         }
 
         submitBtn.addEventListener('click', () => {
-            // Check if all questions are answered
             if (userAnswers.includes(null)) {
-                alert('Please answer all questions before submitting!');
+                alert('⚠️ Please answer all questions before submitting!');
                 return;
             }
 
-            // Calculate score
             let correct = 0;
             questions.forEach((q, index) => {
                 const options = document.querySelectorAll(`.option[data-question="${index}"]`);
@@ -647,18 +1094,25 @@
                 }
             });
 
-            // Display results
             const percentage = Math.round((correct / questions.length) * 100);
             document.getElementById('scoreDisplay').textContent = `${percentage}%`;
+            
+            let message = '';
+            if (percentage >= 90) message = 'Outstanding! 🎉';
+            else if (percentage >= 70) message = 'Great job! 👏';
+            else if (percentage >= 50) message = 'Good effort! 💪';
+            else message = 'Keep practicing! 📚';
+            
             document.getElementById('scoreDetails').textContent = 
-                `You got ${correct} out of ${questions.length} questions correct!`;
+                `${message}\nYou got ${correct} out of ${questions.length} questions correct!`;
             
             submitBtn.style.display = 'none';
             results.style.display = 'block';
-            
-            // Scroll to results
             results.scrollIntoView({ behavior: 'smooth' });
         });
+
+        window.removeImage = removeImage;
+        window.saveApiKey = saveApiKey;
     </script>
 </body>
 </html>
