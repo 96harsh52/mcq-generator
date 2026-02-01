@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI MCQ Generator - Open Source Transformers</title>
-    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/inference@2.6.4/dist/index.min.js"></script>
+    <title>AI MCQ Generator - Open Source</title>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5.0.0/dist/tesseract.min.js'></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
@@ -615,25 +614,24 @@
         <p class="subtitle">Using open-source transformer models for intelligent question generation</p>
         
         <div class="api-key-section">
-            <h3>🔑 Hugging Face API Key</h3>
+            <h3>🔑 Hugging Face API Key (Optional)</h3>
             <p style="color: #92400e; margin-bottom: 10px;">
-                To use AI-powered question generation, you need a free Hugging Face API key.
+                For AI-powered questions, add your free Hugging Face API key. Otherwise, basic questions will be generated.
             </p>
             <div class="api-key-input-wrapper">
                 <input 
                     type="password" 
                     id="apiKey" 
                     class="api-key-input" 
-                    placeholder="Enter your Hugging Face API key (hf_...)"
+                    placeholder="Enter your Hugging Face API key (hf_...) - Optional"
                 >
                 <button class="save-key-btn" onclick="saveApiKey()">Save Key</button>
             </div>
             <div class="api-instructions">
                 <strong>How to get a free API key:</strong><br>
                 1. Go to <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face Tokens</a><br>
-                2. Click "New token"<br>
-                3. Name it "MCQ Generator" and select "Read" access<br>
-                4. Copy and paste the token above<br>
+                2. Click "New token" → Name it "MCQ Generator" → Select "Read" access<br>
+                3. Copy and paste the token above<br>
                 <em>Your key is stored locally in your browser only.</em>
             </div>
         </div>
@@ -643,9 +641,9 @@
         <div class="info-box">
             <h3>✨ How It Works</h3>
             <ul>
-                <li><strong>OCR Technology:</strong> Extracts text from images using Tesseract.js</li>
-                <li><strong>Open Source AI:</strong> Uses Mistral-7B (Hugging Face) for question generation</li>
-                <li><strong>Free & Private:</strong> Runs on free tier APIs, your data stays private</li>
+                <li><strong>OCR Technology:</strong> Extracts text from images (Tesseract.js)</li>
+                <li><strong>Optional AI:</strong> Uses Mistral-7B for smart questions (with API key)</li>
+                <li><strong>Always Works:</strong> Falls back to basic method if AI unavailable</li>
                 <li><strong>GitHub Compatible:</strong> Works perfectly on GitHub Pages</li>
             </ul>
         </div>
@@ -678,15 +676,15 @@
             </div>
         </div>
 
-        <button class="btn" id="generateBtn" disabled>Generate AI-Powered MCQs</button>
+        <button class="btn" id="generateBtn" disabled>Generate MCQs</button>
 
         <div class="loading" id="loading">
             <div class="loading-spinner"></div>
-            <div class="loading-text">AI is working...</div>
+            <div class="loading-text">Processing...</div>
             <div class="progress-bar">
                 <div class="progress-fill" id="progressBar">0%</div>
             </div>
-            <div class="progress-text" id="progressText">Initializing...</div>
+            <div class="progress-text" id="progressText">Starting...</div>
         </div>
 
         <div class="error" id="error"></div>
@@ -711,6 +709,7 @@
         let questions = [];
         let userAnswers = [];
         let hfApiKey = localStorage.getItem('hf_api_key') || '';
+        let worker = null;
 
         const imageInput = document.getElementById('imageInput');
         const imagesPreview = document.getElementById('imagesPreview');
@@ -793,12 +792,6 @@
         generateBtn.addEventListener('click', async () => {
             if (selectedFiles.length === 0) return;
 
-            if (!hfApiKey) {
-                error.style.display = 'block';
-                error.textContent = '❌ Please enter your Hugging Face API key first!';
-                return;
-            }
-
             loading.style.display = 'block';
             error.style.display = 'none';
             quizSection.style.display = 'none';
@@ -806,15 +799,28 @@
 
             try {
                 // Step 1: Extract text from all images using OCR
-                progressText.textContent = 'Step 1/2: Extracting text from images...';
+                progressText.textContent = 'Step 1/2: Extracting text...';
+                progressBar.style.width = '10%';
+                progressBar.textContent = '10%';
+                
                 await extractTextFromAllImages();
                 
-                // Step 2: Generate questions using AI
-                progressText.textContent = 'Step 2/2: AI generating questions...';
-                progressBar.style.width = '85%';
-                progressBar.textContent = '85%';
+                progressBar.style.width = '70%';
+                progressBar.textContent = '70%';
                 
-                await generateAIQuestions();
+                // Step 2: Generate questions
+                progressText.textContent = 'Step 2/2: Generating questions...';
+                
+                if (hfApiKey) {
+                    try {
+                        await generateAIQuestions();
+                    } catch (err) {
+                        console.log('AI generation failed, using fallback:', err);
+                        generateFallbackQuestions();
+                    }
+                } else {
+                    generateFallbackQuestions();
+                }
                 
                 displayQuestions();
                 loading.style.display = 'none';
@@ -836,167 +842,145 @@
 
             for (let i = 0; i < selectedFiles.length; i++) {
                 const file = selectedFiles[i];
-                progressText.textContent = `Extracting text from image ${i + 1} of ${totalImages}...`;
+                progressText.textContent = `Extracting text from image ${i + 1}/${totalImages}...`;
                 
                 const text = await extractTextFromImage(file, i, totalImages);
                 extractedText += text + '\n\n';
                 
-                const progress = Math.round(((i + 1) / totalImages) * 70);
+                const progress = 10 + Math.round(((i + 1) / totalImages) * 60);
                 progressBar.style.width = `${progress}%`;
                 progressBar.textContent = `${progress}%`;
             }
 
-            if (!extractedText.trim() || extractedText.length < 100) {
-                throw new Error('Not enough text found in images. Please upload clearer images with more text content.');
+            if (!extractedText.trim() || extractedText.length < 50) {
+                throw new Error('Not enough text found in images. Please upload clearer images.');
             }
 
-            console.log('Total extracted text length:', extractedText.length);
+            console.log('Extracted text length:', extractedText.length);
         }
 
         async function extractTextFromImage(file, imageIndex, totalImages) {
-            try {
-                const worker = await Tesseract.createWorker({
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            const percent = Math.round(m.progress * 100);
-                            progressText.textContent = `Extracting from image ${imageIndex + 1}/${totalImages}... ${percent}%`;
-                        }
-                    },
-                    workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-                    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-                    corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
-                });
-                
-                await worker.loadLanguage('eng');
-                await worker.initialize('eng');
-                
-                const { data: { text } } = await worker.recognize(file);
-                await worker.terminate();
-                
-                return text.trim();
-            } catch (err) {
-                console.error(`OCR Error for image ${imageIndex + 1}:`, err);
-                throw new Error(`Failed to extract text from image ${imageIndex + 1}: ${err.message}`);
-            }
+            return new Promise(async (resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('OCR timeout - image processing took too long'));
+                }, 60000); // 60 second timeout
+
+                try {
+                    if (!worker) {
+                        progressText.textContent = 'Initializing OCR engine...';
+                        worker = await Tesseract.createWorker({
+                            logger: m => {
+                                if (m.status === 'recognizing text') {
+                                    const percent = Math.round(m.progress * 100);
+                                    progressText.textContent = `Processing image ${imageIndex + 1}/${totalImages}... ${percent}%`;
+                                }
+                            }
+                        });
+                        await worker.loadLanguage('eng');
+                        await worker.initialize('eng');
+                    }
+                    
+                    const { data: { text } } = await worker.recognize(file);
+                    clearTimeout(timeout);
+                    resolve(text.trim());
+                } catch (err) {
+                    clearTimeout(timeout);
+                    console.error(`OCR Error for image ${imageIndex + 1}:`, err);
+                    reject(new Error(`Failed to process image ${imageIndex + 1}. Try a different image.`));
+                }
+            });
         }
 
         async function generateAIQuestions() {
             const difficulty = document.getElementById('difficulty').value;
             const numQuestions = parseInt(document.getElementById('numQuestions').value);
 
-            progressText.textContent = 'Sending to AI model (Mistral-7B)...';
-            
-            // Prepare the prompt
-            const prompt = `Generate ${numQuestions} multiple-choice questions from this text. Difficulty: ${difficulty}.
+            const prompt = `Create ${numQuestions} multiple choice questions from this text. Difficulty: ${difficulty}.
 
-Text: ${extractedText.substring(0, 2000)}
+Text: ${extractedText.substring(0, 1500)}
 
-Format each question as:
+Format:
 Q: [question]
 A) [option]
 B) [option]
 C) [option]
 D) [option]
-Correct: [A/B/C/D]
+Answer: [A/B/C/D]`;
 
-Generate exactly ${numQuestions} questions.`;
-
-            try {
-                // Using Hugging Face Inference API with Mistral model
-                const response = await fetch(
-                    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Authorization": `Bearer ${hfApiKey}`,
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            inputs: prompt,
-                            parameters: {
-                                max_new_tokens: 2000,
-                                temperature: 0.7,
-                                top_p: 0.95,
-                            }
-                        })
-                    }
-                );
-
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        throw new Error('Invalid API key. Please check your Hugging Face token.');
-                    }
-                    throw new Error(`API request failed: ${response.status}`);
+            const response = await fetch(
+                "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+                {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${hfApiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        inputs: prompt,
+                        parameters: {
+                            max_new_tokens: 1500,
+                            temperature: 0.7,
+                        }
+                    })
                 }
+            );
 
-                const data = await response.json();
-                console.log('AI Response:', data);
-                
-                // Parse the response
-                let responseText = '';
-                if (Array.isArray(data) && data[0]?.generated_text) {
-                    responseText = data[0].generated_text;
-                } else if (data.generated_text) {
-                    responseText = data.generated_text;
-                } else {
-                    throw new Error('Unexpected API response format');
-                }
+            if (!response.ok) {
+                throw new Error('AI API request failed');
+            }
 
-                // Parse questions from the AI response
-                parseAIResponse(responseText, numQuestions, difficulty);
+            const data = await response.json();
+            let responseText = Array.isArray(data) && data[0]?.generated_text ? 
+                data[0].generated_text : data.generated_text || '';
 
-                if (questions.length === 0) {
-                    throw new Error('AI did not generate valid questions. Using fallback method.');
-                }
-
-            } catch (err) {
-                console.error('AI Generation Error:', err);
-                console.log('Falling back to basic question generation...');
-                generateFallbackQuestions(numQuestions, difficulty);
+            parseAIResponse(responseText);
+            
+            if (questions.length === 0) {
+                throw new Error('No valid questions generated');
             }
         }
 
-        function parseAIResponse(text, numQuestions, difficulty) {
+        function parseAIResponse(text) {
             questions = [];
+            const difficulty = document.getElementById('difficulty').value;
+            const numQuestions = parseInt(document.getElementById('numQuestions').value);
             
-            // Try to parse structured format
             const questionBlocks = text.split(/Q\d*:|Question \d+:/i).filter(b => b.trim());
             
             for (let i = 0; i < Math.min(questionBlocks.length, numQuestions); i++) {
                 const block = questionBlocks[i];
-                
-                // Extract question
                 const questionMatch = block.match(/^([^\n]+)/);
                 if (!questionMatch) continue;
-                const question = questionMatch[1].trim();
                 
-                // Extract options
+                const question = questionMatch[1].trim();
                 const optionMatches = block.match(/[A-D]\)([^\n]+)/gi);
+                
                 if (!optionMatches || optionMatches.length < 4) continue;
                 
-                const options = optionMatches.map(opt => 
+                const options = optionMatches.slice(0, 4).map(opt => 
                     opt.replace(/^[A-D]\)\s*/i, '').trim()
                 );
                 
-                // Extract correct answer
-                const correctMatch = block.match(/Correct:\s*([A-D])/i);
+                const correctMatch = block.match(/Answer:\s*([A-D])/i);
                 const correct = correctMatch ? 
                     correctMatch[1].toUpperCase().charCodeAt(0) - 65 : 0;
                 
                 questions.push({
                     question: question,
-                    options: options.slice(0, 4),
-                    correct: Math.min(correct, 3),
+                    options: options,
+                    correct: Math.min(Math.max(correct, 0), 3),
                     difficulty: difficulty === 'mixed' ? 
                         ['easy', 'medium', 'hard'][i % 3] : difficulty
                 });
             }
         }
 
-        function generateFallbackQuestions(numQuestions, difficulty) {
+        function generateFallbackQuestions() {
+            const difficulty = document.getElementById('difficulty').value;
+            const numQuestions = parseInt(document.getElementById('numQuestions').value);
+            
             questions = [];
             const sentences = extractedText.split(/[.!?]+/).filter(s => s.trim().length > 30);
-            
             const shuffled = sentences.sort(() => Math.random() - 0.5);
 
             for (let i = 0; i < Math.min(numQuestions, shuffled.length); i++) {
@@ -1007,9 +991,7 @@ Generate exactly ${numQuestions} questions.`;
 
                 const middleWords = words.slice(Math.floor(words.length * 0.2), Math.floor(words.length * 0.8));
                 const answerWord = middleWords[Math.floor(Math.random() * middleWords.length)];
-                
-                const regex = new RegExp(`\\b${answerWord}\\b`, 'i');
-                const questionText = sentence.replace(regex, '______');
+                const questionText = sentence.replace(new RegExp(`\\b${answerWord}\\b`, 'i'), '______');
 
                 const wrongOptions = [];
                 const filtered = words.filter(w => w.toLowerCase() !== answerWord.toLowerCase());
@@ -1055,7 +1037,6 @@ Generate exactly ${numQuestions} questions.`;
                 questionsContainer.appendChild(card);
             });
 
-            // Add click handlers for options
             document.querySelectorAll('.option').forEach(opt => {
                 opt.addEventListener('click', function() {
                     const qIndex = parseInt(this.dataset.question);
@@ -1109,6 +1090,13 @@ Generate exactly ${numQuestions} questions.`;
             submitBtn.style.display = 'none';
             results.style.display = 'block';
             results.scrollIntoView({ behavior: 'smooth' });
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', async () => {
+            if (worker) {
+                await worker.terminate();
+            }
         });
 
         window.removeImage = removeImage;
